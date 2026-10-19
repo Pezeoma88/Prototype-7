@@ -5,6 +5,7 @@ import AppButton from '../components/AppButton';
 import Badge from '../components/Badge';
 import FormSection from '../components/FormSection';
 import InfoRow from '../components/InfoRow';
+import ModeToggle from '../components/ModeToggle';
 import RatingSummary from '../components/RatingSummary';
 import ReviewList from '../components/ReviewList';
 import DemoNetworkPanel from '../components/DemoNetworkPanel';
@@ -24,7 +25,7 @@ import { colors, gutter, radius, roleColor, spacing, typography } from '../theme
 export default function ProfileScreen({
   currentUser,
   activeMode,
-  handleSwitchMode,
+  handleSetMode,
   handleStartEditProfile,
   handleSignOut,
   myDriverRating,
@@ -32,7 +33,6 @@ export default function ProfileScreen({
 }) {
   const isDriver = activeMode === 'driver';
   const tint = roleColor(activeMode);
-  const otherModeLabel = isDriver ? 'Rider' : 'Driver';
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -67,12 +67,7 @@ export default function ProfileScreen({
           <Text style={[styles.modeStrong, { color: tint }]}>{isDriver ? 'Driver' : 'Rider'}</Text>.
           Your profile, rides, and requests stay the same in both modes.
         </Text>
-        <AppButton
-          title={`Switch to ${otherModeLabel}`}
-          icon={isDriver ? 'walk' : 'car-sport'}
-          variant={isDriver ? 'rider' : 'primary'}
-          onPress={handleSwitchMode}
-        />
+        <ModeToggle activeMode={activeMode} onChange={handleSetMode} />
       </FormSection>
 
       {/* About */}

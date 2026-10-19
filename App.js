@@ -37,6 +37,7 @@ import {
 } from './lib/rideRequests';
 import { colors } from './theme/theme';
 import TabBar from './components/TabBar';
+import Toast from './components/Toast';
 import { DemoNetworkBanner } from './components/DemoNetworkPanel';
 import SignInScreen from './screens/SignInScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -137,6 +138,12 @@ export default function App() {
   const [isPickingPhoto, setIsPickingPhoto] = useState(false);
   // A problem with the picked photo (wrong format, too big), shown under it.
   const [profilePhotoError, setProfilePhotoError] = useState('');
+
+  // The floating confirmation currently showing (e.g. "Profile saved"):
+  // { id, title, message, tone }, or null. Each one gets a new id so the
+  // same message shown twice in a row still appears again.
+  const [toast, setToast] = useState(null);
+  const toastIdRef = useRef(0);
 
   // Spike: a short message about the last request action (or why one was blocked).
   const [requestNotice, setRequestNotice] = useState('');
@@ -548,18 +555,26 @@ export default function App() {
     setSelectedRideDriverId(null);
     setReservingDriverId(null);
     setRequestNotice('');
+    setToast(null);
     setActiveTab('home');
   }
 
-  // Switches the signed-in person between Driver and Rider mode without
-  // signing out. Only the session's activeMode changes: the profile, its id,
-  // and every ride/request stay exactly as they are in Supabase. Any
-  // half-finished mode-specific panel (Offer a Ride form, Need a Ride panel,
-  // request-confirm panel) is closed so the new mode starts clean. An open
-  // Ride Details screen stays open, so "Switch to Driver to manage" lands
-  // right on the ride's driver controls.
-  function handleSwitchMode() {
-    if (!currentUser) {
+  // Shows a short floating confirmation (see components/Toast.js).
+  function showToast(title, message = '', tone = 'success') {
+    toastIdRef.current += 1;
+    setToast({ id: toastIdRef.current, title, message, tone });
+  }
+
+  // Puts the signed-in person in Driver or Rider mode ('driver' / 'rider')
+  // without signing out, then confirms it with a toast. Picking the mode
+  // that's already active does nothing. Only the session's activeMode
+  // changes: the profile, its id, and every ride/request stay exactly as
+  // they are in Supabase. Any half-finished mode-specific panel (Offer a
+  // Ride form, Need a Ride panel, request-confirm panel) is closed so the
+  // new mode starts clean. An open Ride Details screen stays open, so
+  // "Switch to Driver to manage" lands right on the ride's driver controls.
+  function handleSetMode(mode) {
+    if (!currentUser || (mode !== 'driver' && mode !== 'rider') || mode === activeMode) {
       return;
     }
     Keyboard.dismiss();
@@ -575,7 +590,20 @@ export default function App() {
       resetRequestSubmission();
       loadBoard();
     }
-    setActiveMode((current) => (current === 'driver' ? 'rider' : 'driver'));
+    setActiveMode(mode);
+    showToast(
+      mode === 'driver' ? 'Driver mode on' : 'Rider mode on',
+      mode === 'driver'
+        ? 'Offer rides and manage requests for your rides.'
+        : 'Browse rides and request a seat.',
+      mode
+    );
+  }
+
+  // Flips to the other mode. Takes no arguments, so it can be passed
+  // straight to a button's onPress (as Ride Details does).
+  function handleSwitchMode() {
+    handleSetMode(activeMode === 'driver' ? 'rider' : 'driver');
   }
 
   // Opens Edit Profile with the current saved values filled in.
@@ -752,6 +780,7 @@ export default function App() {
       }
 
       const updatedAccount = profileToAccount(data[0]);
+      const emailChanged = updatedAccount.email !== currentUser.email;
       setCurrentUser(updatedAccount);
       // Waitlist entries added on this device keep their own copy of the name.
       setLocalWaitingRiders((current) =>
@@ -761,6 +790,14 @@ export default function App() {
       );
       Keyboard.dismiss();
       resetProfileForm();
+      // Only shown once Supabase has confirmed the update. A changed email
+      // is called out, because it's now the one that signs this profile in.
+      showToast(
+        'Profile saved',
+        emailChanged
+          ? `Next time, sign in with ${updatedAccount.email}.`
+          : 'Your changes are live on your profile.'
+      );
       // Rides and requests show names and photos from profiles, so reload
       // the board to show a changed name/photo everywhere.
       loadBoard();
@@ -1991,6 +2028,7 @@ export default function App() {
             <HomeScreen
               currentUser={currentUser}
               activeMode={activeMode}
+              handleSetMode={handleSetMode}
               drivers={drivers}
               sortedDrivers={sortedDrivers}
               riders={riders}
@@ -2034,6 +2072,7 @@ export default function App() {
                 <RequestsScreen
                   currentUser={currentUser}
                   activeMode={activeMode}
+                  handleSetMode={handleSetMode}
                   drivers={drivers}
                   myRequestRows={myRequestRows}
                   isBoardLoading={isBoardLoading}
@@ -2078,7 +2117,7 @@ export default function App() {
                   <ProfileScreen
                     currentUser={currentUser}
                     activeMode={activeMode}
-                    handleSwitchMode={handleSwitchMode}
+                    handleSetMode={handleSetMode}
                     handleStartEditProfile={handleStartEditProfile}
                     handleSignOut={handleSignOut}
                     myDriverRating={myDriverRating}
@@ -2087,6 +2126,7 @@ export default function App() {
                 ))}
             </SafeAreaView>
           )}
+          <Toast toast={toast} onHide={() => setToast(null)} />
         </View>
 
         <DemoNetworkBanner />

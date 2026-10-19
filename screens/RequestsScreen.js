@@ -5,6 +5,7 @@ import Avatar from '../components/Avatar';
 import Badge from '../components/Badge';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
+import ModeToggle from '../components/ModeToggle';
 import Notice from '../components/Notice';
 import ScreenHeader from '../components/ScreenHeader';
 import SectionHeader from '../components/SectionHeader';
@@ -36,6 +37,7 @@ const RIDER_SECTIONS = [
 export default function RequestsScreen({
   currentUser,
   activeMode,
+  handleSetMode,
   drivers,
   myRequestRows,
   isBoardLoading,
@@ -305,6 +307,9 @@ export default function RequestsScreen({
       />
 
       <View style={styles.body}>
+        {/* Which requests show here follows the mode, so switch right here */}
+        <ModeToggle activeMode={activeMode} onChange={handleSetMode} style={styles.modeToggle} />
+
         {boardError !== '' && <Notice message={boardError} tone="danger" />}
         {requestNotice !== '' && <Notice message={requestNotice} />}
 
@@ -416,6 +421,9 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: gutter,
+  },
+  modeToggle: {
+    marginBottom: spacing.lg,
   },
   flex: {
     flex: 1,

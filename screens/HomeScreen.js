@@ -19,6 +19,7 @@ import Badge from '../components/Badge';
 import Card from '../components/Card';
 import AppButton from '../components/AppButton';
 import EmptyState from '../components/EmptyState';
+import ModeToggle from '../components/ModeToggle';
 import SectionHeader from '../components/SectionHeader';
 import SegmentedControl from '../components/SegmentedControl';
 import Notice from '../components/Notice';
@@ -35,8 +36,8 @@ function getGreeting() {
   return 'Good evening';
 }
 
-// Home tab: the shared CarpoolBoard. Shows a greeting, what CarpoolBoard is
-// for, the role's main actions, then Available Rides (Driver offers, blue)
+// Home tab: the shared CarpoolBoard. Shows a greeting, the Driver/Rider
+// mode toggle, what CarpoolBoard is for, the role's main actions, then Available Rides (Driver offers, blue)
 // and Riders Looking for a Ride (Rider requests, orange).
 //
 // Ride Details and the Offer a Ride / Need a Ride forms open in place of the
@@ -49,6 +50,7 @@ function getGreeting() {
 export default function HomeScreen({
   currentUser,
   activeMode,
+  handleSetMode,
   drivers,
   sortedDrivers,
   riders,
@@ -120,13 +122,11 @@ export default function HomeScreen({
           </Pressable>
         </View>
 
+        {/* Which mode you're in, and the one-tap switch */}
+        <ModeToggle activeMode={activeMode} onChange={handleSetMode} style={styles.modeToggle} />
+
         {/* What CarpoolBoard is for */}
         <View style={styles.hero}>
-          <Badge
-            label={isDriver ? 'Driving' : 'Riding'}
-            tone={isDriver ? 'driver' : 'rider'}
-            style={styles.heroBadge}
-          />
           <Text style={styles.heroTitle}>Where are you headed?</Text>
           <Text style={styles.heroText}>
             {isDriver
@@ -390,8 +390,8 @@ const styles = StyleSheet.create({
   hero: {
     marginBottom: spacing.xl,
   },
-  heroBadge: {
-    marginBottom: spacing.sm,
+  modeToggle: {
+    marginBottom: spacing.xl,
   },
   heroTitle: {
     ...typography.display,
