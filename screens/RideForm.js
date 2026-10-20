@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Keyboard, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import AppButton from '../components/AppButton';
@@ -15,6 +15,7 @@ import {
   formatDepartureDate,
   formatDepartureTime,
 } from '../lib/format';
+import { locateNearestPickup } from '../lib/currentLocation';
 import { DESTINATION_LOCATIONS } from '../lib/destinationLocations';
 import { PICKUP_LOCATIONS, isSamePickup, isValidCoordinate } from '../lib/pickupLocations';
 import { colors, radius, spacing, typography } from '../theme/theme';
@@ -77,6 +78,13 @@ export default function RideForm({
     return preset !== null && destinationPointInput !== null && isSamePickup(preset, destinationPointInput);
   });
 
+  // "Use My Location": whether a lookup is running, and the message about
+  // its outcome ({ tone, message, showSettings } or null). A manual pick
+  // bumps locateRequest so a lookup still in flight can't overwrite it.
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationNotice, setLocationNotice] = useState(null);
+  const locateRequest = useRef(0);
+
   if (rideConfirmation) {
     return (
       <RidePostedCard
@@ -91,6 +99,62 @@ export default function RideForm({
     Keyboard.dismiss();
     setDeparturePickerMode(null);
     setPickupInput(spot);
+    locateRequest.current += 1;
+    setIsLocating(false);
+    setLocationNotice(null);
+  }
+
+  // Picks the landmark nearest the phone. Only the landmark (its own name and
+  // coordinates) goes into the form; the phone's position never leaves
+  // locateNearestPickup.
+  async function handleUseMyLocation() {
+    if (isLocating) {
+      return;
+    }
+    Keyboard.dismiss();
+    setDeparturePickerMode(null);
+    const request = ++locateRequest.current;
+    setIsLocating(true);
+    setLocationNotice(null);
+
+    const result = await locateNearestPickup();
+    if (request !== locateRequest.current) {
+      return;
+    }
+    setIsLocating(false);
+
+    if (result.spot) {
+      setPickupInput(result.spot);
+      setLocationNotice({
+        tone: 'info',
+        message: `Pickup set to ${result.spot.label}, the closest SMU landmark to you.`,
+      });
+    } else if (result.denied) {
+      setLocationNotice({
+        tone: 'warning',
+        message: result.canAskAgain
+          ? 'Location access wasn’t allowed. Choose a pickup spot below, or tap Use My Location to try again.'
+          : 'Location access is off for CarpoolBoard. You can turn it on in Settings, or choose a pickup spot below.',
+        showSettings: !result.canAskAgain,
+      });
+    } else if (result.servicesOff) {
+      setLocationNotice({
+        tone: 'warning',
+        message:
+          'Location Services are turned off on this phone. Turn them on in Settings › Privacy & Security, or choose a pickup spot below.',
+      });
+    } else if (result.tooFar) {
+      setLocationNotice({
+        tone: 'warning',
+        message:
+          'You’re more than about 1.5 km from the SMU pickup spots, so automatic selection isn’t available. Choose a pickup spot below.',
+      });
+    } else {
+      setLocationNotice({
+        tone: 'warning',
+        message: 'We couldn’t get your location. Choose a pickup spot below.',
+      });
+    }
   }
 
   // Picking a destination preset also maps it, unless the driver already
@@ -224,6 +288,29 @@ export default function RideForm({
           pinned, so it always has a readable name and is never a private
           address. It's required to post or save a ride. */}
       <FormSection title="Pickup spot" icon="location">
+        <AppButton
+          title={isLocating ? 'Finding nearest landmark…' : 'Use My Location'}
+          icon="navigate"
+          variant="secondary"
+          size="sm"
+          onPress={handleUseMyLocation}
+          loading={isLocating}
+          style={styles.locateButton}
+        />
+        {locationNotice !== null && (
+          <View accessibilityLiveRegion="polite">
+            <Notice message={locationNotice.message} tone={locationNotice.tone} />
+            {locationNotice.showSettings && (
+              <Pressable
+                onPress={() => Linking.openSettings()}
+                accessibilityRole="link"
+                style={styles.settingsLink}
+              >
+                <Text style={styles.settingsLinkText}>Open Settings</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
         <SpotPicker
           value={pickupInput}
           presets={PICKUP_LOCATIONS}
@@ -474,6 +561,20 @@ const styles = StyleSheet.create({
   },
   pickupChipTextActive: {
     color: colors.textOnAccent,
+  },
+  locateButton: {
+    alignSelf: 'flex-start',
+    marginBottom: spacing.md,
+  },
+  settingsLink: {
+    alignSelf: 'flex-start',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  settingsLinkText: {
+    ...typography.label,
+    color: colors.primary,
   },
   pickupHint: {
     ...typography.caption,
