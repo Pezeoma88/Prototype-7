@@ -8,6 +8,7 @@ import DriverReviewSection from '../components/DriverReviewSection';
 import FormSection from '../components/FormSection';
 import InfoRow from '../components/InfoRow';
 import Notice from '../components/Notice';
+import PickupMapPreview from '../components/PickupMapPreview';
 import RatingSummary from '../components/RatingSummary';
 import RequestSubmissionPanel from '../components/RequestSubmissionPanel';
 import ReviewList from '../components/ReviewList';
@@ -180,6 +181,7 @@ export default function RideDetailsScreen({
             destination={detailsDriver.destination}
             tint={colors.driver}
           />
+          <PickupMapPreview pickup={detailsDriver.pickup} />
         </View>
 
         <InfoRow icon="time-outline" label="Departs" value={detailsDriver.departureTime} divider />
