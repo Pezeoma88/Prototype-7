@@ -27,6 +27,7 @@ export default function ProfileScreen({
   activeMode,
   handleSetMode,
   handleStartEditProfile,
+  handleOpenOnboarding,
   handleSignOut,
   myDriverRating,
   myDriverReviews,
@@ -153,6 +154,25 @@ export default function ProfileScreen({
             </View>
           }
         />
+        {/* Reopens the first-time walkthrough (welcome, modes, profile). */}
+        <Pressable
+          onPress={handleOpenOnboarding}
+          accessibilityRole="button"
+          accessibilityLabel="App intro"
+          accessibilityHint="Shows the CarpoolBoard walkthrough again"
+          style={({ pressed }) => pressed && styles.introPressed}
+        >
+          <InfoRow
+            icon="sparkles-outline"
+            label="App intro"
+            divider
+            right={
+              <View style={styles.rightAlign}>
+                <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+              </View>
+            }
+          />
+        </Pressable>
       </FormSection>
 
       <Text style={styles.disclaimer}>
@@ -313,6 +333,9 @@ const styles = StyleSheet.create({
   rightAlign: {
     flex: 1,
     alignItems: 'flex-end',
+  },
+  introPressed: {
+    opacity: 0.6,
   },
   disclaimer: {
     ...typography.caption,

@@ -48,6 +48,7 @@ import MapScreen from './screens/MapScreen';
 import RequestsScreen from './screens/RequestsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import OnboardingScreen from './screens/OnboardingScreen';
 
 // Phase 1A layout: constants/helpers live in lib/format.js and lib/board.js,
 // screens live in screens/, shared UI in components/, and design tokens in
@@ -123,6 +124,11 @@ export default function App() {
   // validation/save error. Saving updates the SAME profiles row, so the
   // profile id, its rides/requests, and activeMode never change.
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  // Whether the full-screen onboarding is showing (see startOnboarding).
+  // Session-only like activeMode: it opens automatically only right after a
+  // sign-in that created a new profile, so returning users never see it
+  // unless they choose "App intro" in Profile.
+  const [isOnboarding, setIsOnboarding] = useState(false);
   const [profileNameInput, setProfileNameInput] = useState('');
   const [profileEmailInput, setProfileEmailInput] = useState('');
   const [profileBioInput, setProfileBioInput] = useState('');
@@ -500,6 +506,9 @@ export default function App() {
     setIsSigningIn(true);
     try {
       let account = await findProfileByEmail(trimmedEmail);
+      // True only when this sign-in inserted the profile, which is what
+      // makes someone a first-time user and shows them onboarding.
+      let isNewProfile = false;
 
       if (!account) {
         if (trimmedName === '') {
@@ -520,12 +529,16 @@ export default function App() {
           if (!account) throw error;
         } else {
           account = profileToAccount(data);
+          isNewProfile = true;
         }
       }
 
       currentUserIdRef.current = account.id;
       setCurrentUser(account);
       setActiveMode(authRole);
+      if (isNewProfile) {
+        startOnboarding(account);
+      }
       setAuthNameInput('');
       setAuthEmailInput('');
       setAuthError('');
@@ -549,6 +562,7 @@ export default function App() {
     setMyRequestRows([]);
     setCurrentUser(null);
     setActiveMode(null);
+    setIsOnboarding(false);
     resetProfileForm();
     resetForm();
     setIsAddingRider(false);
@@ -604,6 +618,48 @@ export default function App() {
   // straight to a button's onPress (as Ride Details does).
   function handleSwitchMode() {
     handleSetMode(activeMode === 'driver' ? 'rider' : 'driver');
+  }
+
+  // Opens the 3-step onboarding with its optional profile step filled in
+  // from `account`'s saved values (Edit Profile's form state is reused, so
+  // nothing starts blank). Called after a sign-in that created a new
+  // profile, and from Profile's "App intro" row.
+  function startOnboarding(account) {
+    Keyboard.dismiss();
+    resetProfileForm();
+    setProfileNameInput(account.name);
+    setProfileEmailInput(account.email);
+    setProfileBioInput(account.bio);
+    setProfileVehicleInput(account.vehicleMakeModel);
+    setIsOnboarding(true);
+  }
+
+  function handleOpenOnboarding() {
+    if (currentUser) {
+      startOnboarding(currentUser);
+    }
+  }
+
+  // Ends onboarding. With `saveProfile`, the profile step is saved through
+  // handleSaveProfile first, and onboarding stays open (showing its error)
+  // if that fails. Then the chosen mode is applied with the same logic as
+  // the Driver/Rider toggle, and Home opens.
+  async function handleFinishOnboarding(mode, saveProfile) {
+    if (isSavingProfile) {
+      return;
+    }
+    if (saveProfile) {
+      const saved = await handleSaveProfile();
+      if (!saved) {
+        return;
+      }
+    } else {
+      resetProfileForm();
+    }
+    setIsOnboarding(false);
+    handleLeaveRequestSubmission();
+    setActiveTab('home');
+    handleSetMode(mode);
   }
 
   // Opens Edit Profile with the current saved values filled in.
@@ -687,10 +743,11 @@ export default function App() {
   // is what signs this profile in, and the old one no longer matches it.
   // A newly picked photo is uploaded to Storage and its path saved in
   // avatar_path. activeMode is not touched. An empty bio/vehicle is saved
-  // as NULL.
+  // as NULL. Resolves to true once Supabase confirms the save (onboarding
+  // waits on this before opening Home), false otherwise.
   async function handleSaveProfile() {
     if (isSavingProfile || !currentUser) {
-      return;
+      return false;
     }
 
     const trimmedName = profileNameInput.trim();
@@ -700,27 +757,27 @@ export default function App() {
 
     if (trimmedName === '') {
       setProfileFormError('Please enter your name.');
-      return;
+      return false;
     }
     if (trimmedName.length > NAME_MAX_LENGTH) {
       setProfileFormError(`Your name can be at most ${NAME_MAX_LENGTH} characters.`);
-      return;
+      return false;
     }
     if (newEmail === '') {
       setProfileFormError('Please enter your email address.');
-      return;
+      return false;
     }
     if (!EMAIL_PATTERN.test(newEmail)) {
       setProfileFormError('Please enter a valid email address.');
-      return;
+      return false;
     }
     if (trimmedBio.length > BIO_MAX_LENGTH) {
       setProfileFormError(`Your bio can be at most ${BIO_MAX_LENGTH} characters.`);
-      return;
+      return false;
     }
     if (trimmedVehicle.length > VEHICLE_MAX_LENGTH) {
       setProfileFormError(`Vehicle make/model can be at most ${VEHICLE_MAX_LENGTH} characters.`);
-      return;
+      return false;
     }
 
     const duplicateEmailMessage = 'That email is already used by another CarpoolBoard account.';
@@ -732,7 +789,7 @@ export default function App() {
         const existing = await findProfileByEmail(newEmail);
         if (existing && existing.id !== currentUser.id) {
           setProfileFormError(duplicateEmailMessage);
-          return;
+          return false;
         }
       }
 
@@ -757,7 +814,7 @@ export default function App() {
               ? uploadError.message
               : "Couldn't upload your photo, so nothing was saved. Check your connection and try again."
           );
-          return;
+          return false;
         }
       }
 
@@ -771,7 +828,7 @@ export default function App() {
         // (e.g. from another phone). The unique constraint is the backstop.
         if (error.code === '23505') {
           setProfileFormError(duplicateEmailMessage);
-          return;
+          return false;
         }
         throw error;
       }
@@ -801,9 +858,11 @@ export default function App() {
       // Rides and requests show names and photos from profiles, so reload
       // the board to show a changed name/photo everywhere.
       loadBoard();
+      return true;
     } catch (error) {
       console.warn('CarpoolBoard: saving profile failed', error);
       setProfileFormError("Couldn't save your profile. Check your connection and try again.");
+      return false;
     } finally {
       setIsSavingProfile(false);
     }
@@ -1936,6 +1995,31 @@ export default function App() {
     );
   }
 
+  if (isOnboarding) {
+    return (
+      <SafeAreaProvider>
+        <OnboardingScreen
+          currentUser={currentUser}
+          initialMode={activeMode}
+          profileNameInput={profileNameInput}
+          setProfileNameInput={setProfileNameInput}
+          profileBioInput={profileBioInput}
+          setProfileBioInput={setProfileBioInput}
+          profileVehicleInput={profileVehicleInput}
+          setProfileVehicleInput={setProfileVehicleInput}
+          profilePhotoDraft={profilePhotoDraft}
+          profilePhotoError={profilePhotoError}
+          isPickingPhoto={isPickingPhoto}
+          handlePickProfilePhoto={handlePickProfilePhoto}
+          handleDiscardProfilePhoto={handleDiscardProfilePhoto}
+          profileFormError={profileFormError}
+          isSavingProfile={isSavingProfile}
+          onFinish={handleFinishOnboarding}
+        />
+      </SafeAreaProvider>
+    );
+  }
+
   const detailsView =
     detailsDriver !== null ? (
       <RideDetailsScreen
@@ -2119,6 +2203,7 @@ export default function App() {
                     activeMode={activeMode}
                     handleSetMode={handleSetMode}
                     handleStartEditProfile={handleStartEditProfile}
+                    handleOpenOnboarding={handleOpenOnboarding}
                     handleSignOut={handleSignOut}
                     myDriverRating={myDriverRating}
                     myDriverReviews={myDriverReviews}
